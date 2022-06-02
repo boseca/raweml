@@ -94,7 +94,7 @@ func Example_send_advanced() {
 		Attachments: []raweml.Attachment{{Name: "Mars.png", ContentID: "1001"}}, //, ContentType: "image/png; name=\"Mars.png\""}},
 		Headers:     nil,
 		Priority:    raweml.PriorityHigh,
-		Topic:       topic, // when set,  "Thread-Topic", "Thread-Index" and "References" header attributs will be set
+		Topic:       topic, // when set,  "Thread-Topic", "Thread-Index" and "References" header attributes will be set
 		InReplyTo:   "",
 		AwsRegion:   "us-east-1",
 	}

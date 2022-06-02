@@ -23,6 +23,7 @@ type TestConversionItem struct {
 	Description   string
 }
 
+//gocyclo:ignore
 func TestThread(t *testing.T) {
 
 	// t.Skip("Skipping ALL thread tests!")
@@ -126,8 +127,8 @@ func TestThread(t *testing.T) {
 		"00006746B0": {false, 693056307200, 11, 0}, // 1h 59m
 	}
 
-	t.Run("Test Converstion File Time Stamp to Unix Time", func(t *testing.T) {
-		// t.Skip("Skip: Test Converstion File Time Stamp to Unix Time")
+	t.Run("Test Conversation File Time Stamp to Unix Time", func(t *testing.T) {
+		// t.Skip("Skip: Test Conversation File Time Stamp to Unix Time")
 
 		tests := map[int]TestConversionItem{
 			1: {128166372003061629, 1172163600000000000, "2007-02-22 17:00:00.306162"},
