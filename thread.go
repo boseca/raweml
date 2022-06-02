@@ -2,15 +2,11 @@ package raweml
 
 import (
 	"bytes"
-	"crypto/sha1"
 	"encoding/base64"
 	"encoding/binary"
-	"encoding/hex"
 	"errors"
 	"io"
-	"log"
 	"math/rand"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,28 +22,25 @@ type Thread struct {
 }
 
 // ChildBlock represents a sub thread of the email thread
+//
+// - TimeFlag: 1 bit
+//		0 when TimeDiff < 0.02s && TimeDiff > 2 years;
+//		1 when TimeDiff < 1s && TimeDiff > 56 years)
+// - TimeDifference: time difference between the child block create time and the time in the header block expressed in FILETIME units
+// 		if TimeFlag = 0 : discard high 15 bits and low 18 bits
+// 		if TimeFlag = 1 : discard high 10 bits and low 32 bits
+// - RandomNum: random number gernerated by calling GetTickCount()
+// - SequenceCount: default set to 0 (Four bits containing a sequence count that is taken from part of the random number.)
 type ChildBlock struct {
-	// TimeFlag: 1 bit
-	//		0 when TimeDiff < 0.02s && TimeDiff > 2 yearsy;
-	//		1 when TimeDiff < 1s && TimeDiff > 56 years)
-	TimeFlag bool
-
-	// TimeDifference: time difference between the child block create time and the time in the header block expressed in FILETIME units
-	// 		if TimeFlag = 0 : discard high 15 bits and low 18 bits
-	// 		if TimeFlag = 1 : discard high 10 bits and low 32 bits
+	TimeFlag       bool
 	TimeDifference int64 // Unix NanoSecond
-
-	// RandomNum: random number gernerated by calling GetTickCount()
-	RandomNum byte
-
-	// SequenceCount: default set to 0 (Four bits containing a sequence count that is taken from part of the random number.)
-	SequenceCount byte
+	RandomNum      byte
+	SequenceCount  byte
 }
 
+// NewThread creates a new Thread struct based on the provided `topic` argument
 func NewThread(topic string) Thread {
-	data := Hash(topic)
-	guid := uuid.NewSHA1(NameSpaceAppId, data)
-
+	guid := uuid.NewSHA1(nameSpaceAppID, []byte(topic))
 	return Thread{
 		time.Now().UTC().UnixNano(),
 		guid,
@@ -55,8 +48,9 @@ func NewThread(topic string) Thread {
 		nil,
 	}
 }
-func NewEmailThreadFromParams(dateUnixNanoSec int64, guid uuid.UUID, topic string, childBlocks []ChildBlock) (r Thread) {
 
+// NewEmailThreadFromParams creates a new Thread struct from arguments
+func NewEmailThreadFromParams(dateUnixNanoSec int64, guid uuid.UUID, topic string, childBlocks []ChildBlock) (r Thread) {
 	return Thread{
 		dateUnixNanoSec,
 		guid,
@@ -64,7 +58,9 @@ func NewEmailThreadFromParams(dateUnixNanoSec int64, guid uuid.UUID, topic strin
 		childBlocks,
 	}
 }
-func ParseEmailThread(idx string, topic string) (r Thread) {
+
+// ParseEmailThread creates thread based on the idx and topic
+func ParseEmailThread(idx string, topic string) (r Thread, err error) {
 	// Thread-Index is composed of 22 bytes total + 0 or more child blocks of 5 bytes
 	//  1 byte	- reserved (value 1) (used with next 5 bytes as 6 bytes structure holding the FILETIME value)
 	//  5 bytes	- (plus the first byte) current system time converted to the FILETIME structure format
@@ -74,13 +70,13 @@ func ParseEmailThread(idx string, topic string) (r Thread) {
 	// -------------------------------------------------------------------------------------------------
 
 	if len(idx) < 22 {
-		panic("Inavlid Thread-Index. Expected minimum 22 bytes.")
+		return r, errors.New("Inavlid Thread-Index. Expected minimum 22 bytes.")
 	}
 
 	// decode Base64
 	bytes, errD := base64.StdEncoding.DecodeString(idx)
 	if errD != nil {
-		panic(errD)
+		return r, errD
 	}
 
 	// get TimeStamp (first 6 bytes)
@@ -88,15 +84,15 @@ func ParseEmailThread(idx string, topic string) (r Thread) {
 	copy(bTS[:6], bytes[:6])
 
 	// convert TimeStamp to Unix nanoseconds
-	uxNs := TimeStampToUnix(binary.BigEndian.Uint64(bTS[:]))
+	uxNs := timeStampToUnix(binary.BigEndian.Uint64(bTS[:]))
 
 	// Unix Time in nanoseconds
 	threadTimeUnixNano := time.Unix(0, int64(uxNs)).UTC().UnixNano()
 
 	// GUID portion
-	threadGuid, errG := uuid.FromBytes(bytes[6:22])
+	threadGUID, errG := uuid.FromBytes(bytes[6:22])
 	if errG != nil {
-		panic(errG)
+		return r, errG
 	}
 
 	// child blocks
@@ -104,42 +100,47 @@ func ParseEmailThread(idx string, topic string) (r Thread) {
 	for i := 22; i < len(bytes) && i < (22+500*5); i += 5 {
 		block, err := ParseChildBlock(string(bytes[i : i+5]))
 		if err != nil {
-			panic(err)
-		} else {
-			childBlocks = append(childBlocks, block)
+			return r, err
 		}
+		childBlocks = append(childBlocks, block)
 	}
 
 	return Thread{
 		threadTimeUnixNano,
-		threadGuid,
+		threadGUID,
 		topic,
 		childBlocks,
-	}
+	}, nil
 
 }
+
+// AddChildBlock ads a child block to the emails thread
 func (thread *Thread) AddChildBlock() {
 	deltaTime := time.Since(time.Unix(0, thread.DateUnixNano))
 	thread.ChildBlocks = append(thread.ChildBlocks, NewChildBlock(deltaTime.Nanoseconds()))
 }
+
+// String returns thread data as Base64 encoded string
 func (thread Thread) String() string {
 	return string(thread.Bytes())
 }
+
+// Bytes returns thread bytes data encoded in Base64
 func (thread Thread) Bytes() (r []byte) {
 
 	// get Unix nanoseconds
 	tn := thread.DateUnixNano
 
 	// conver to timestamp
-	tn = UnixToTimeStamp64(tn)
-	tsBytes := IntToBytes(tn)
+	tn = unixToTimeStamp64(tn)
+	tsBytes := int64ToBytes(tn)
 
 	// compose Thread Index
 	bufIdx := new(bytes.Buffer)
 	encoder := base64.NewEncoder(base64.StdEncoding, bufIdx)
 	defer encoder.Close()
 	encoder.Write(tsBytes[:6])                     // 6  - TIME_STAMP
-	encoder.Write(thread.GuidBytes())              // 16 - GUID
+	encoder.Write(thread.GUIDBytes())              // 16 - GUID
 	for i := 0; i < len(thread.ChildBlocks); i++ { // 5  - per Child block
 		encoder.Write(thread.ChildBlocks[i].Bytes())
 	}
@@ -147,31 +148,37 @@ func (thread Thread) Bytes() (r []byte) {
 	encoder.Close()
 	return bufIdx.Bytes()
 }
-func (thread Thread) GuidBytes() (bytes []byte) {
-	bytes, err := thread.guid.MarshalBinary()
-	if err != nil {
-		panic(err)
-	}
+
+// GUIDBytes returns bytes of the thread GUID
+func (thread Thread) GUIDBytes() []byte {
+	bytes, _ := thread.guid.MarshalBinary() // this will never return error
 	return bytes
 }
-func (thread Thread) Write(w io.Writer) {
+func (thread Thread) write(w io.Writer) {
 	w.Write(thread.Bytes())
 }
+
+// Index is an alias for String() function that returns the thread as Base64 encoded string
 func (thread Thread) Index() string {
-	return string(thread.Bytes())
+	return thread.String()
 }
 
-// Reference returns a hashed version of the Thread GUID
+// Reference returns a hashed version of the Thread GUID that is created based on nameSpaceAppID and Topic
 func (thread *Thread) Reference() string {
-	return HexToBase64(thread.GuidBytes())
+	return hexToBase64(thread.GUIDBytes())
 }
-func (thread Thread) GetGuid() uuid.UUID {
+
+// GetGUID returns thread GUID
+func (thread Thread) GetGUID() uuid.UUID {
 	return thread.guid
 }
+
+// GetTopic returns thread topic
 func (thread Thread) GetTopic() string {
 	return thread.topic
 }
 
+// NewChildBlock creates a child header block
 func NewChildBlock(deltaTimeUxNs int64) (r ChildBlock) {
 	// child block is composed of 5 bytes total as follows:
 	// 1 bit 	- One  bit containing a code representing the difference between the current time and the time stored in the header block.
@@ -210,6 +217,8 @@ func NewChildBlock(deltaTimeUxNs int64) (r ChildBlock) {
 		sequenceCount,
 	}
 }
+
+// ParseChildBlock converts string to a ChildBlock struct
 func ParseChildBlock(blockString string) (block ChildBlock, err error) {
 	if len(blockString) < 0 || len(blockString) > 5 {
 		return ChildBlock{}, errors.New("Block string is too short/long!")
@@ -258,7 +267,7 @@ func (block ChildBlock) Bytes() []byte {
 		return nil
 	}
 	cbBytes := []byte{0, 0, 0, 0, 0}
-	const FIRST_BIT_UP = uint64(0x80000000)
+	const FirstBitUp = uint64(0x80000000)
 
 	// get first 4 bytes as follows:
 	//  1  bit - time flag
@@ -277,7 +286,7 @@ func (block ChildBlock) Bytes() []byte {
 	}
 	// componse first bit
 	if block.TimeFlag {
-		tsDiff = tsDiff | FIRST_BIT_UP
+		tsDiff = tsDiff | FirstBitUp
 	}
 	binary.BigEndian.PutUint32(cbBytes, uint32(tsDiff))
 
@@ -286,32 +295,33 @@ func (block ChildBlock) Bytes() []byte {
 
 	return cbBytes
 }
+
+// String returns the base64 encoded string of the header child block
 func (block ChildBlock) String() string {
 	return string(block.Bytes())
 }
 
 // Helping types -----------------------
 
-// FILETIME
-// represents the date and time for a file.
+// Filetime represents the date and time for a file.
 // It is a 64-bit value representing the number of 100-nanosecond intervals since January 1, 1601 (UTC)
 // This is different from Unix time which is the number of nanoseconds elapsed since January 1, 1970, 00:00:00 (UTC)
-// --------------------------
-// 	Generic file time stamp :
-// --------------------------
-// 	31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 	15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0
-//  |<------ year ------>|<- month ->|<---- day --->|	|<--- hour --->|<---- minute --->|<- second/2 ->|
-//
-//    Offset   Length   Contents
-// 	   0       7 bits   year     years since 1980
-// 	   7       4 bits   month    [1..12]
-//    11       5 bits   day      [1..31]
-//    16       5 bits   hour     [0..23]
-//    21       6 bits   minite   [0..59]
-//    27       5 bits   second/2 [0..29]
-// --------------------------
-// ref: https://golang.org/src/syscall/types_windows.go
 type Filetime struct {
+	// --------------------------
+	// 	Generic file time stamp :
+	// --------------------------
+	// 	31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 	15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0
+	//  |<------ year ------>|<- month ->|<---- day --->|	|<--- hour --->|<---- minute --->|<- second/2 ->|
+	//
+	//    Offset   Length   Contents
+	// 	   0       7 bits   year     years since 1980
+	// 	   7       4 bits   month    [1..12]
+	//    11       5 bits   day      [1..31]
+	//    16       5 bits   hour     [0..23]
+	//    21       6 bits   minite   [0..59]
+	//    27       5 bits   second/2 [0..29]
+	// --------------------------
+	// ref: https://golang.org/src/syscall/types_windows.go
 	LowDateTime  uint32
 	HighDateTime uint32
 }
@@ -329,6 +339,8 @@ func (ft *Filetime) UnixNanoseconds() int64 {
 	nsec *= 100
 	return nsec
 }
+
+// UnixNanoToFiletime converts nano seconds to Filetime
 func UnixNanoToFiletime(nsec int64) (ft Filetime) {
 	// convert into 100-nanosecond
 	nsec /= 100
@@ -343,76 +355,36 @@ func UnixNanoToFiletime(nsec int64) (ft Filetime) {
 }
 
 // Helping functions
-func GetNormilizedSubject(subject string, level int) string {
-	normalizedSubject := subject
-	normalizedSubject = strings.TrimPrefix(normalizedSubject, "RE:")
-	normalizedSubject = strings.TrimPrefix(normalizedSubject, "FW:")
-	normalizedSubject = strings.TrimPrefix(normalizedSubject, " ")
 
-	// do that again until we get rid of all prefixes
-	if len(normalizedSubject) != len(subject) && level > 1 {
-		normalizedSubject = GetNormilizedSubject(normalizedSubject, level-1)
-	}
-	return normalizedSubject
+// hexToBase64 converts bytes to base64 string
+func hexToBase64(bites []byte) string {
+	return base64.StdEncoding.EncodeToString(bites)
 }
-func ParseGuid(s string) uuid.UUID {
-	// remove dashes/spaces + decode string to bytes[]
-	s = strings.Replace(s, "-", "", -1)
-	s = strings.Replace(s, " ", "", -1)
-	guidBytes, err := hex.DecodeString(s)
-	if err != nil {
-		panic(err)
-	}
 
-	// create UUID from bytes
-	guid, err1 := uuid.FromBytes(guidBytes)
-	if err1 != nil {
-		panic(err1)
-	}
-
-	return guid
-}
-func TimeStampToUnix(timeStampTicks uint64) (unixNano uint64) {
+// timeStampToUnix converts time stamp to unix time
+func timeStampToUnix(timeStampTicks uint64) (unixNano uint64) {
 	// 	timeStampTicks - a 64-bit value representing the number of 100-nanosecond intervals since January 1, 1601 (UTC)
 	//	 	  UnixNano - the number of nanoseconds elapsed since January 1, 1970, 00:00:00 (UTC)
 	return (timeStampTicks - 116444736000000000) * 100
 }
-func UnixToTimeStamp64(unixNanosecond int64) int64 {
+
+// unixToTimeStamp64 converts unix time to time stamp int64
+func unixToTimeStamp64(unixNanosecond int64) int64 {
 	return unixNanosecond/100 + 116444736000000000
 }
-func UnixToTimeStamp(unixNanosecond uint64) uint64 {
+
+// unixToTimeStamp converts unix time to time stamp uint64
+func unixToTimeStamp(unixNanosecond uint64) uint64 {
 	return unixNanosecond/100 + 116444736000000000
 }
 
-func IntToBytes(num int64) []byte {
-	buff := new(bytes.Buffer)
-	err := binary.Write(buff, binary.BigEndian, num)
-	if err != nil {
-		log.Panic(err)
-	}
+// Helping functions (private)
 
-	return buff.Bytes()
+func int64ToBytes(num int64) []byte {
+	b := make([]byte, 8)
+	binary.BigEndian.PutUint64(b, uint64(num))
+	return b
 }
-func IntToHexU(num uint64) []byte {
-	buff := new(bytes.Buffer)
-	err := binary.Write(buff, binary.LittleEndian, num)
-	if err != nil {
-		log.Panic(err)
-	}
-
-	return buff.Bytes()
-}
-func BytesToUInt64(s []byte) uint64 {
-	var b [8]byte
-	copy(b[8-len(s):], s)
-	return uint64(binary.BigEndian.Uint64(b[:]))
-}
-func Hash(s string) []byte {
-	h := sha1.New()
-	h.Write([]byte(s))
-	return h.Sum(nil)
-}
-
-func HexToBase64(bites []byte) string {
-	return base64.StdEncoding.EncodeToString(bites)
+func bytesToInt64(b []byte) int64 {
+	return int64(binary.BigEndian.Uint64(b))
 }

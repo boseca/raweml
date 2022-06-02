@@ -1,3 +1,4 @@
+// Package raweml allows you to send emails with Priority and Conversation Topic using the AWS SES raw email.
 package raweml
 
 import (
@@ -10,7 +11,7 @@ import (
 	"net/textproto"
 	"os"
 	"path/filepath"
-	"time"
+	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -18,123 +19,187 @@ import (
 	"github.com/google/uuid"
 )
 
+// Email is the structure containing all email details.
+// To send the email just call the Send() method.
 type Email struct {
 	From        string
-	To          string
-	Feedback    string // feedback destination. If left blank "Return-path" or "From" address will be used instead
-	Subject     string
+	Recipients  Recipients
+	Feedback    string // feedback destination email address. If left blank "Return-path" or "From" address will be used instead.
+	Subject     string // to change subject Charset use the MIME encoded-word syntax (e.g. "=?utf-8?B?5L2g5aW9?=") (ref: https://docs.aws.amazon.com/ses/latest/dg/send-email-raw.html)
 	TextBody    string
-	HtmlBody    string
+	HTMLBody    string
 	CharSet     string
-	Attachments []Attachment // optional
+	Attachments []Attachment // set it to `nil` if there are no attachments
 	Headers     textproto.MIMEHeader
 	Priority    EmailPriority
 	Topic       string
+	InReplyTo   string // Message-ID of the email to reply to in order for the email to be threaded. Gmail requires direct connection between emails to be threaded. Outlook is using Thread-Index and Thread-Topic instead
+	AwsRegion   string // AWS Region of the SES service
+}
+
+// Recipients contains list of To, Cc, Bcc recipients
+type Recipients struct {
+	_            struct{}  `type:"structure"`
+	BccAddresses []*string `type:"list"`
+	CcAddresses  []*string `type:"list"`
+	ToAddresses  []*string `type:"list"`
 }
 
 // Attachment represents an email attachment.
 type Attachment struct {
-	// Name must be set to a valid file name.
-	Name string
-
-	// Optional.
-	// Uses mime.TypeByExtension and falls back to application/octet-stream if unknown.
-	ContentType string
-
-	Data io.Reader
+	Name        string // Name must be set to a valid fully qulified file name.
+	ContentID   string // Optional. Used for embedding images into the email (e.g. <img src="cid:{{ContentID}}">)
+	ContentType string // Optional. When blank falls back to 'application/octet-stream'.
+	Data        io.Reader
 }
 
+// EmailPriority defines the type of priorty for the email
 type EmailPriority string
 
+// Email Priority Types
 const (
-	High   EmailPriority = "High"
-	Normal EmailPriority = "Normal"
-	Low    EmailPriority = "Low"
+	PriorityHigh   EmailPriority = "High"
+	PriorityNormal EmailPriority = "Normal"
+	PriorityLow    EmailPriority = "Low"
 )
 
 const crlf = "\r\n"
 
+// Unique Application GUID used for defining the email conversation thread.
 var (
-	NameSpaceAppId = uuid.Must(uuid.Parse("9e01b615-a6a4-4883-b9bd-c1c80f4cceb4"))
+	nameSpaceAppID = uuid.Must(uuid.Parse("9e01b615-a6a4-4883-b9bd-c1c80f4cceb4"))
 )
 
-func (email Email) Send() (*ses.SendRawEmailOutput, error) {
-
-	// get email Input
-	input := email.GetSendRawEmailInput()
-
-	// send email
-	svc := ses.New(session.New(&aws.Config{
-		Region: aws.String("us-east-1"),
-	}))
-
-	// return results
-	// fmt.Printf("\nEmail:\n%v", string(input.RawMessage.Data))
-	return svc.SendRawEmail(input)
-
+// Send sends the email using the AWS SES
+func Send(email Email) error {
+	_, err := email.Send()
+	return err
 }
+
+// NewRecipients converts comma seperated list of to, cc and bcc into Recipients structure
+func NewRecipients(to string, cc string, bcc string) (r Recipients) {
+	if len(to) > 0 {
+		for _, s := range strings.Split(to, ",") {
+			r.ToAddresses = append(r.ToAddresses, aws.String(s))
+		}
+	}
+	if len(cc) > 0 {
+		for _, s := range strings.Split(cc, ",") {
+			r.CcAddresses = append(r.CcAddresses, aws.String(s))
+		}
+	}
+	if len(bcc) > 0 {
+		for _, s := range strings.Split(bcc, ",") {
+			r.BccAddresses = append(r.BccAddresses, aws.String(s))
+		}
+	}
+	return r
+}
+
+// String converts Recipients structure to a string with comma seperated recipients
+func (r Recipients) String() string {
+	return strings.Join(toStringArray(r.All()), ",")
+}
+
+// IsEmpty returns true if there are no recipients in any of To, Cc or Bcc
+func (r Recipients) IsEmpty() bool {
+	return len(r.ToAddresses) == 0 && len(r.CcAddresses) == 0 && len(r.BccAddresses) == 0
+}
+
+// All returns all recipients as an array of string pointers
+func (r Recipients) All() []*string {
+	return append(r.ToAddresses, append(r.CcAddresses, r.BccAddresses...)...)
+}
+
+// toStringArray converst array of string pointers to string array
+func toStringArray(a []*string) []string {
+	var r []string
+	if len(a) > 0 {
+		for _, o := range a {
+			r = append(r, *o)
+		}
+	}
+	return r
+}
+
+// Bcc returns a string of comma seperated Bcc recipients
+func (r Recipients) Bcc() string { return strings.Join(toStringArray(r.BccAddresses), ",") }
+
+// Cc returns a string of comma seperated Cc recipients
+func (r Recipients) Cc() string { return strings.Join(toStringArray(r.CcAddresses), ",") }
+
+// To returns a string of comma seperated To recipients
+func (r Recipients) To() string { return strings.Join(toStringArray(r.ToAddresses), ",") }
+
+// Send sends the email
+func (email Email) Send() (*ses.SendRawEmailOutput, error) {
+	// create session
+	svc := ses.New(session.New(&aws.Config{
+		Region: aws.String(email.AwsRegion),
+	}))
+	// send email
+	return email.SendWithSession(svc, nil)
+}
+
+// SendWithSession sends the email using provided svc session
 func (email Email) SendWithSession(svc *ses.SES, input *ses.SendRawEmailInput) (result *ses.SendRawEmailOutput, err error) {
 	if svc == nil {
-		panic(errors.New("Missing session parameter for SendWithInput function!"))
+		return nil, errors.New("Missing session parameter for SendWithInput function!")
 	}
 	if input == nil {
-		input = email.GetSendRawEmailInput()
+		if input, err = email.GetSendRawEmailInput(); err != nil {
+			return nil, err
+		}
 	}
 	return svc.SendRawEmail(input)
 }
 
-func (email Email) GetSendRawEmailInput() *ses.SendRawEmailInput {
+// GetSendRawEmailInput converts the email to *ses.SendRawEmailInput structure required by ses.SendRawEmail() method
+func (email Email) GetSendRawEmailInput() (*ses.SendRawEmailInput, error) {
 
 	// get whole email content as bytes
 	emailBytes, err := email.Bytes()
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	// return SendRawEmailInput
 	return &ses.SendRawEmailInput{
-		Destinations: []*string{aws.String(email.To)},
-		Source:       email.GetSource(),
+		// Source:       email.GetSource(),	// commented out to send feedback email the same way as SendEmail
+		Destinations: email.Recipients.All(),
 		RawMessage: &ses.RawMessage{
 			Data: emailBytes,
 		},
-	}
-}
-func (email Email) GetSource() *string {
-	if len(email.Feedback) > 0 {
-		return aws.String(email.Feedback)
-	} else {
-		return nil
-	}
+	}, nil
 }
 
+// Bytes converts the email structure into email raw data bytes
 func (email Email) Bytes() ([]byte, error) {
-	// ref: https://github.com/jpoehls/gophermail/blob/master/main.go
-
 	// figure out the email parts
 	hasAttachment := len(email.Attachments) > 0
 	hasTxt := len(email.TextBody) > 0
-	hasHTML := len(email.HtmlBody) > 0
+	hasHTML := len(email.HTMLBody) > 0
 	hasAlternative := hasTxt && hasHTML
 
 	// validate the email
 	if !(hasAttachment || hasTxt || hasHTML || hasAlternative) {
 		return nil, errors.New("Cannot send empty email")
 	}
-	if email.To == "" { // && email.CC && email.BCC
+	if email.Recipients.IsEmpty() {
 		return nil, errors.New("At least one of the TO, CC  and BCC is required to send email.")
 	}
 
 	buf := new(bytes.Buffer)
-	writer := multipart.NewWriter(buf)
-	defer writer.Close()
+	var writer *multipart.Writer
 
 	// set Header attributes
 	h := email.GetHeaders()
 
 	setIfMissing(h, "From", email.From)
-	setIfMissing(h, "To", email.To)
-	// setIfMissing(h,"Return-Path", sender)
+	setIfMissing(h, "To", email.Recipients.To())
+	setIfMissing(h, "Cc", email.Recipients.Cc())
+	setIfMissing(h, "Bcc", email.Recipients.Bcc())
+	setIfMissing(h, "Return-Path", email.Feedback)
 	setIfMissing(h, "Subject", email.Subject)
 
 	// add Thread-Index
@@ -144,9 +209,12 @@ func (email Email) Bytes() ([]byte, error) {
 		setIfMissing(h, "Thread-Index", thread.String())
 		setIfMissing(h, "References", thread.Reference())
 	}
+	if len(email.InReplyTo) > 0 {
+		setIfMissing(h, "In-Reply-To", email.InReplyTo)
+	}
 
 	// add Email Priority
-	if email.Priority != Normal {
+	if email.Priority != PriorityNormal {
 		setIfMissing(h, "Importance", email.Priority.String())
 		setIfMissing(h, "X-Priority", email.Priority.ToNumber())
 		// h.Set("X-MSMail-Priority", email.Priority.String())
@@ -158,14 +226,16 @@ func (email Email) Bytes() ([]byte, error) {
 	// add multipart
 	if hasAttachment {
 		writer = multipart.NewWriter(buf)
+		defer writer.Close() // this will not write the boundery because buffer is allready flushed
 		h.Set("Content-Type", "multipart/mixed; boundary=\""+writer.Boundary()+"\"")
 	} else if hasAlternative {
 		writer = multipart.NewWriter(buf)
+		defer writer.Close()
 		h.Set("Content-Type", "multipart/alternative; boundary=\""+writer.Boundary()+"\"")
 	} else if hasTxt {
-		h.Set("Content-Type", "text/plain; charset=us-ascii;")
+		h.Set("Content-Type", "text/plain; charset="+email.getCharSet()) // us-ascii
 	} else if hasHTML {
-		h.Set("Content-Type", "text/html; charset=UTF-8")
+		h.Set("Content-Type", "text/html; charset="+email.getCharSet()) // UTF-8
 	} else {
 		return nil, errors.New("Missing email content!")
 	}
@@ -189,12 +259,12 @@ func (email Email) Bytes() ([]byte, error) {
 		}
 
 		// TEXT body
-		if err := addPart(altWriter, "text/plain; charset=us-ascii", email.TextBody); err != nil {
+		if err := addPart(altWriter, "text/plain; charset="+email.getCharSet(), email.TextBody); err != nil {
 			return nil, err
 		}
 
 		// HTML body:
-		if err := addPart(altWriter, "text/html; charset=UTF-8", email.HtmlBody); err != nil {
+		if err := addPart(altWriter, "text/html; charset="+email.getCharSet(), email.HTMLBody); err != nil {
 			return nil, err
 		}
 		altWriter.Close()
@@ -202,14 +272,14 @@ func (email Email) Bytes() ([]byte, error) {
 	} else if hasAlternative || hasAttachment {
 		// TEXT body
 		if hasTxt {
-			if err := addPart(writer, "text/plain; charset=us-ascii", email.TextBody); err != nil {
+			if err := addPart(writer, "text/plain; charset="+email.getCharSet(), email.TextBody); err != nil {
 				return nil, err
 			}
 		}
 
 		// HTML body:
 		if hasHTML {
-			if err := addPart(writer, "text/html; charset=UTF-8", email.HtmlBody); err != nil {
+			if err := addPart(writer, "text/html; charset="+email.getCharSet(), email.HTMLBody); err != nil {
 				return nil, err
 			}
 		}
@@ -218,7 +288,7 @@ func (email Email) Bytes() ([]byte, error) {
 			buf.Write([]byte(email.TextBody))
 			fmt.Fprint(buf, crlf)
 		} else if hasHTML {
-			buf.Write([]byte(email.HtmlBody))
+			buf.Write([]byte(email.HTMLBody))
 			fmt.Fprint(buf, crlf)
 		} else {
 			return nil, errors.New("Email is empty!")
@@ -226,7 +296,11 @@ func (email Email) Bytes() ([]byte, error) {
 	}
 
 	// Attachments (if there is any)
-	addAttachments(buf, email.Attachments, writer.Boundary())
+	if hasAttachment {
+		if err := addAttachments(buf, email.Attachments, writer.Boundary()); err != nil {
+			return nil, err
+		}
+	}
 
 	// done writing
 	if writer != nil {
@@ -239,6 +313,7 @@ func (email Email) Bytes() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// GetHeaders returns a pointer to the email.Headers field
 func (email Email) GetHeaders() *textproto.MIMEHeader {
 	if email.Headers == nil {
 		email.Headers = make(textproto.MIMEHeader)
@@ -246,7 +321,7 @@ func (email Email) GetHeaders() *textproto.MIMEHeader {
 	return &email.Headers
 }
 
-// Set sets the header entries associated with key to the single element value. It replaces any existing values associated with key.
+// SetHeader sets the header entries associated with key to the single element value. It replaces any existing values associated with key.
 func (email *Email) SetHeader(key, value string) {
 	h := email.GetHeaders()
 	h.Set(key, value)
@@ -268,34 +343,46 @@ func addPart(writer *multipart.Writer, contentType string, body string) error {
 	return nil
 }
 
-func _addAttachment(w io.Writer, file, boundary string) {
-	fmt.Fprintf(w, "\n--%s\n", boundary)
-	contents, err := os.Open(file)
-	if err != nil {
-		fmt.Fprintf(w, "Content-Type: text/plain; charset=utf-8\n")
-		fmt.Fprintf(w, "could not open file: %v\n", err)
-	} else {
-		defer contents.Close()
-		fmt.Fprintf(w, "Content-Type: application/octet-stream\n")
-		fmt.Fprintf(w, "Content-Transfer-Encoding: base64\n")
-		fmt.Fprintf(w, "Content-Disposition: attachment; filename=\"%s\"\n\n", filepath.Base(file))
-
-		b64 := base64.NewEncoder(base64.StdEncoding, w)
-		defer b64.Close()
-		io.Copy(b64, contents)
-
-		// compress
-		// gzip := gzip.NewWriter(b64)
-		// defer gzip.Close()
-		// io.Copy(gzip, contents)
-
+func _addAttachment(w io.Writer, item Attachment, boundary string) error {
+	contentType := item.ContentType
+	if len(contentType) == 0 {
+		contentType = "application/octet-stream"
 	}
+
+	file, err := os.Open(item.Name)
+	if err != nil {
+		return err
+		// alternative: attach blank file
+		// fmt.Fprintf(w, "\n--%s\n", boundary)
+		// fmt.Fprintf(w, "Content-Type: text/plain; charset=utf-8\n")
+		// fmt.Fprintf(w, "could not open file: %v\n", err)
+	}
+	defer file.Close()
+
+	fmt.Fprintf(w, "\n--%s\n", boundary)
+	fmt.Fprintf(w, "Content-Type: %s\n", contentType)
+	fmt.Fprintf(w, "Content-Transfer-Encoding: base64\n")
+	fmt.Fprintf(w, "Content-ID: <%s>\n", item.ContentID)
+	fmt.Fprintf(w, "X-Attachment-Id: %s\n", item.ContentID)
+	fmt.Fprintf(w, "Content-Disposition: attachment; filename=\"%s\"\n\n", filepath.Base(item.Name))
+
+	b64 := base64.NewEncoder(base64.StdEncoding, w)
+	defer b64.Close()
+	io.Copy(b64, file)
+
+	// compress
+	// gzip := gzip.NewWriter(b64)
+	// defer gzip.Close()
+	// io.Copy(gzip, file)
+
+	return nil
 }
 
 func addAttachments(w io.Writer, attachments []Attachment, boundary string) error {
-	path := "/c/Projects/go/src/NewPortal/emailProcessor/.idea/"
 	for _, item := range attachments {
-		_addAttachment(w, path+item.Name, boundary)
+		if err := _addAttachment(w, item, boundary); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -338,35 +425,45 @@ func writeHeader(w io.Writer, header *textproto.MIMEHeader) error {
 	return nil
 }
 func setIfMissing(h *textproto.MIMEHeader, key, value string) {
-	if _, ok := (*h)[key]; h != nil && !ok {
-		h.Set(key, value)
+	if len(value) > 0 {
+		if _, ok := (*h)[key]; h != nil && !ok {
+			h.Set(key, value)
+		}
 	}
 }
 
 // -- Helpter functions -------------------------------------------
 
-// TodayEST returns current date portion of time in EST timezone
-func TodayEST() string {
-	layout := "2006-01-02"
-	loc, err := time.LoadLocation("EST")
-	if err != nil {
-		fmt.Println(err)
+// GetSource returns the From email address
+func (email Email) GetSource() *string {
+	if len(email.From) > 0 {
+		return aws.String(email.From)
 	}
-	return time.Now().UTC().In(loc).Format(layout)
+	return nil
 }
 
+func (email Email) getCharSet() string {
+	if len(email.CharSet) > 0 {
+		return email.CharSet
+	}
+	return "UTF-8"
+}
+
+// ToNumber converts email priority to a string number
 func (priority EmailPriority) ToNumber() string {
 	switch priority {
-	case High:
+	case PriorityHigh:
 		return "1" // 1 - High
-	case Normal:
+	case PriorityNormal:
 		return "3" // 3 - Normal (default)
-	case Low:
+	case PriorityLow:
 		return "5" // 5 - Low
 	default:
 		return "3" // 3 - Normal
 	}
 }
+
+// String converts email priority to string
 func (priority EmailPriority) String() string {
 	return string(priority)
 }

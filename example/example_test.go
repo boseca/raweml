@@ -1,25 +1,31 @@
 package raweml
 
 import (
-	"NewPortal/emailProcessor/raweml"
 	"bytes"
+	"crypto/sha1"
+	"encoding/base64"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/boseca/raweml"
+
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/ses"
-	// "github.com/pborman/uuid"
 )
 
-// email body is wrapped afer 77 chars
+// NOTE: email body is wrapped afer 77 chars
 
 func Example() {
 
 	// parse Thread-Index value
 	idx := "AdWrqyuNMGDKcPPKTE6qJN0A4Jd4nA=="
-	emailThread := raweml.ParseEmailThread(idx, "some topic")
-	resultThreadIndex := raweml.NewEmailThreadFromParams(emailThread.DateUnixNano, emailThread.GetGuid(), emailThread.GetTopic(), nil)
+	emailThread, err := raweml.ParseEmailThread(idx, "some topic")
+	if err != nil {
+		panic(err)
+	}
+	resultThreadIndex := raweml.NewEmailThreadFromParams(emailThread.DateUnixNano, emailThread.GetGUID(), emailThread.GetTopic(), nil)
 	fmt.Printf("MATCH Parsed and Generated Thread-Index: %v (%v == %v)\n", idx == resultThreadIndex.String(), idx, resultThreadIndex)
 
 	// create New Thread-Index value
@@ -29,73 +35,75 @@ func Example() {
 
 	// Output:
 	//MATCH Parsed and Generated Thread-Index: true (AdWrqyuNMGDKcPPKTE6qJN0A4Jd4nA== == AdWrqyuNMGDKcPPKTE6qJN0A4Jd4nA==)
-	//New Thread-Index: Ad??????WE0HYQEmX0q51rIrkL43iw==
+	//New Thread-Index: Ad??????bwrdh8mmV5iaDFHXGlEfuQ==
 }
 
-func ExampleRaweml_send() {
-	// simple email sent with AWS SES
-
-	// build the email
-	email := raweml.Email{
-		From:     "MRI Diagnostics <no-reply@mrialerts.com>", // "sender@example.com",
-		To:       "bjankulovski@mediaresources.com",
-		Subject:  "Simple Test",
-		HtmlBody: "<h1>Amazon SES Test Email (AWS SDK for Go)</h1><p><b>Time: </b>" + time.Now().Format("2006-01-02 15:04:05") + "</p>",
-	}
+// simple email sent with AWS SES
+func Example_send() {
 
 	// send the email
-	result, err := email.Send()
-
-	// LogSendRawEmailResponse(err)
+	err := raweml.Send(
+		raweml.Email{
+			From:       "NO REPLAY EMAIL ACCOUNT <no-reply@example.com>",
+			Recipients: raweml.NewRecipients("customer@example.com", "", ""),
+			Subject:    "Simple Test",
+			HTMLBody:   "<h1>Amazon SES Test Email (AWS SDK for Go)</h1><p><b>Time: </b>" + time.Now().Format("2006-01-02 15:04:05") + "</p>",
+			AwsRegion:  "us-east-1",
+		})
 
 	// check the response
-	validateOutput(email, result, err)
+	if err != nil {
+		fmt.Printf("%v", err)
+	} else {
+		fmt.Print("ok")
+	}
 
 	// Output: ok
 }
 
-// func ExampleSendEmail() {
-func ExampleRaweml_send_advanced() {
+func Example_send_advanced() {
 	// send email using AWS SES that contains:
 	//	Thread-index	[Date, GUID(topic), Child Block]
 	//  References 		topic
 	//	Priority		[high, normal, low]
 	//	from 	(multiple addresses)
+	//	to		(multiple addresses)
 	//	cc		(multiple addresses)
 	//	bcc		(multiple addresses)
-	//	EMAIL-FROM for AWS feedback ?????????????????
 	//	Text body
 	//	HTML body
 	//	Attachment
-	//	Embeded image ???????????????????????????????
 
-	subject := "TESTING alerts: DEMO Panel 333  Heritage Dr. and 11 st. (Some Company Name) # 0000-0000A 0000-0000A 0000-0000A >>" + time.Now().Format("2006-01-02 15:04:05")
-	topic := GetAlertTopic("525", "bose_user", raweml.GetNormilizedSubject(subject, 3))
+	subject := "TEST email =?utf-8?B?5L2g5aW9?= >>" + time.Now().Format("2006-01-02 15:04:05")
+	topic := getEmailTopic(525, "customer_username", getNormilizedSubject(subject, 3))
 
 	// build the email
 	email := raweml.Email{
-		"MRI Diagnostics <no-reply@mrialerts.com>", // "sender@example.com",
-		"bjankulovski@mediaresources.com",
-		"AWS Email Feedback <aws-feedback@mrialerts.com>",
-		subject,
-		"This email was sent with Amazon SES using the AWS SDK for Go.",
-		"",
-		// "<h1>Amazon SES Test Email (AWS SDK for Go)</h1><p>This email was sent with " +
-		// 	"<a href='https://aws.amazon.com/ses/'>Amazon SES</a> using the " +
-		// 	"<a href='https://aws.amazon.com/sdk-for-go/'>AWS SDK for Go</a>.</p>" +
-		// 	"<br />" +
-		// 	"<p><b>Time: </b>" + time.Now().Format("2006-01-02 15:04:05") + "</p>",
-		"UTF-8",
-		[]raweml.Attachment{{Name: "test.email"}},
-		nil,
-		raweml.High,
-		topic, // when set,  "Thread-Topic", "Thread-Index" and "References" header attributs will be set
+		From:       "NO REPLAY EMAIL ACCOUNT <no-reply@example.com>",
+		Recipients: raweml.NewRecipients("customer@example.com", "", ""),
+		Feedback:   "", // "AWS Email Feedback <aws-feedback@example.com>",
+		Subject:    subject,
+		TextBody:   "This email was sent with Amazon SES using the AWS SDK for Go.",
+		HTMLBody: "<h1>Amazon SES Test Email (AWS SDK for Go)</h1><p>This email was sent with " +
+			"<a href='https://aws.amazon.com/ses/'>Amazon SES</a> using the " +
+			"<a href='https://aws.amazon.com/sdk-for-go/'>AWS SDK for Go</a>.</p>" +
+			"<img src='cid:1001' title='mars'/>" +
+			"<br />" +
+			"<p><b>Time: </b>" + time.Now().Format("2006-01-02 15:04:05") + "</p>",
+		CharSet:     "UTF-8",
+		Attachments: []raweml.Attachment{{Name: "Mars.png", ContentID: "1001"}}, //, ContentType: "image/png; name=\"Mars.png\""}},
+		Headers:     nil,
+		Priority:    raweml.PriorityHigh,
+		Topic:       topic, // when set,  "Thread-Topic", "Thread-Index" and "References" header attributs will be set
+		InReplyTo:   "",
+		AwsRegion:   "us-east-1",
 	}
 
 	// send the email
 	result, err := email.Send()
 
-	// LogSendRawEmailResponse(err)
+	// log the error
+	logSendRawEmailResponse(err)
 
 	// check the response
 	validateOutput(email, result, err)
@@ -103,7 +111,9 @@ func ExampleRaweml_send_advanced() {
 	// Output: ok
 }
 
-func LogSendRawEmailResponse(err error) {
+// Helping functions -----------------------
+
+func logSendRawEmailResponse(err error) {
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
@@ -127,25 +137,45 @@ func LogSendRawEmailResponse(err error) {
 		return
 	}
 }
-func GetAlertTopic(displayId, username, subject string) string {
-	today := raweml.TodayEST()
-	alertType := strings.Split(subject, ":")[0]
-	hashDisplayId := raweml.Hash(displayId)
-	hashUser := raweml.Hash(username)
+func getEmailTopic(keyId int, username string, subject string) string {
+	sKeyId := strconv.Itoa(keyId)
+	emailType := strings.Split(subject, ":")[0]
+	hashKeyId := hash(sKeyId)
+	hashUser := hash(username)
 
 	buf := new(bytes.Buffer)
-	buf.Write(hashDisplayId)
+	buf.Write(hashKeyId)
 	buf.Write(hashUser)
-	hashes := raweml.HexToBase64(buf.Bytes())
+	hashes := hexToBase64(buf.Bytes())
 
-	return fmt.Sprintf("%s %s %s", today, alertType, hashes)
+	return fmt.Sprintf("%s %s %s", sKeyId, emailType, hashes)
 }
 func validateOutput(email raweml.Email, result *ses.SendRawEmailOutput, err error) {
 	if err == nil && strings.Contains(fmt.Sprintf("%v", result), "MessageId:") {
-		fmt.Println("ok")
+		fmt.Println("ok") // email successfully sent
 	} else {
-		fmt.Println("Email Sent to address: " + email.To)
 		fmt.Println("EMAIL FAILED: ", result, err)
 	}
+}
+func getNormilizedSubject(subject string, level int) string {
+	// return the subject without the "RE:" or "FW:" prefixes
+	normalizedSubject := subject
+	normalizedSubject = strings.TrimPrefix(normalizedSubject, "RE:")
+	normalizedSubject = strings.TrimPrefix(normalizedSubject, "FW:")
+	normalizedSubject = strings.TrimPrefix(normalizedSubject, " ")
 
+	// do that again until we get rid of all prefixes
+	if len(normalizedSubject) != len(subject) && level > 1 {
+		normalizedSubject = getNormilizedSubject(normalizedSubject, level-1)
+	}
+	return normalizedSubject
+}
+func hexToBase64(bites []byte) string {
+	return base64.StdEncoding.EncodeToString(bites)
+}
+func hash(s string) []byte {
+	// create SHA1 hash for a given string
+	h := sha1.New()
+	h.Write([]byte(s))
+	return h.Sum(nil)
 }
