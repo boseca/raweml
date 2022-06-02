@@ -76,7 +76,7 @@ func Send(email Email) error {
 	return err
 }
 
-// NewRecipients converts comma seperated list of to, cc and bcc into Recipients structure
+// NewRecipients converts comma separated list of to, cc and bcc into Recipients structure
 func NewRecipients(to string, cc string, bcc string) (r Recipients) {
 	if len(to) > 0 {
 		for _, s := range strings.Split(to, ",") {
@@ -96,7 +96,7 @@ func NewRecipients(to string, cc string, bcc string) (r Recipients) {
 	return r
 }
 
-// String converts Recipients structure to a string with comma seperated recipients
+// String converts Recipients structure to a string with comma separated recipients
 func (r Recipients) String() string {
 	return strings.Join(toStringArray(r.All()), ",")
 }
@@ -111,7 +111,7 @@ func (r Recipients) All() []*string {
 	return append(r.ToAddresses, append(r.CcAddresses, r.BccAddresses...)...)
 }
 
-// toStringArray converst array of string pointers to string array
+// toStringArray converts array of string pointers to string array
 func toStringArray(a []*string) []string {
 	var r []string
 	if len(a) > 0 {
@@ -122,13 +122,13 @@ func toStringArray(a []*string) []string {
 	return r
 }
 
-// Bcc returns a string of comma seperated Bcc recipients
+// Bcc returns a string of comma separated Bcc recipients
 func (r Recipients) Bcc() string { return strings.Join(toStringArray(r.BccAddresses), ",") }
 
-// Cc returns a string of comma seperated Cc recipients
+// Cc returns a string of comma separated Cc recipients
 func (r Recipients) Cc() string { return strings.Join(toStringArray(r.CcAddresses), ",") }
 
-// To returns a string of comma seperated To recipients
+// To returns a string of comma separated To recipients
 func (r Recipients) To() string { return strings.Join(toStringArray(r.ToAddresses), ",") }
 
 // Send sends the email
@@ -226,7 +226,7 @@ func (email Email) Bytes() ([]byte, error) {
 	// add multipart
 	if hasAttachment {
 		writer = multipart.NewWriter(buf)
-		defer writer.Close() // this will not write the boundery because buffer is allready flushed
+		defer writer.Close() // this will not write the boundery because buffer is all ready flushed
 		h.Set("Content-Type", "multipart/mixed; boundary=\""+writer.Boundary()+"\"")
 	} else if hasAlternative {
 		writer = multipart.NewWriter(buf)
