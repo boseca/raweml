@@ -44,6 +44,7 @@ jobs:
         run: |
           echo "BEFORE -----------------"
           pwd
+          ls -la 
           echo $GOPATH
           echo $GITHUB_PATH
           echo $GITHUB_ENV
@@ -75,6 +76,7 @@ jobs:
         run: |
           echo "PWD"
           pwd
+          mkdir coverage
           goveralls -coverprofile=covprofile -service=github
           goveralls -coverprofile=./coverage/lcov.info -service=github
         # working-directory: src/github.com/boseca/raweml # add this !!!!!!!!!!!
@@ -94,13 +96,16 @@ jobs:
         run: |
           echo "PWD"
           pwd
-          cd $GOPATH/src/github.com/boseca/raweml
+          # cd $GOPATH/src/github.com/boseca/raweml
           goveralls -coverprofile=covprofile -service=github
 
       - name: Push test coverage 3
         if: success()
         continue-on-error: true
         uses: shogo82148/actions-goveralls@v1
+        run: |
+          echo "PWD"
+          pwd
         with:
           path-to-profile: covprofile
 
