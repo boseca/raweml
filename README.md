@@ -2,6 +2,10 @@ RawEml
 =========
 This is a wrapper for the AWS SES raw email and allows to set the message priority and the conversation topic to group emails with same topic.
 
+[![Build Status](https://github.com/boseca/raweml/workflows/build/badge.svg)](https://github.com/boseca/raweml/actions?query=workflow%3Abuild)
+[![Coverage Status](https://coveralls.io/repos/github/boseca/raweml/badge.svg?branch=master)](https://coveralls.io/github/boseca/raweml?branch=master)
+[![Documentation](https://godoc.org/gopkg.in/raweml?status.svg)](https://godoc.org/gopkg.in/raweml)
+
 ## Description
 
 RawEml package allows you to specify any header attributes for an email sent with AWS SES 
