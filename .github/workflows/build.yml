@@ -29,7 +29,9 @@ jobs:
           go get -v -t -d ./...
 
       - name: Run Test and get coverage
-        run: go test -race -covermode atomic -coverprofile=covprofile
+        run: |
+          go test -race -covermode atomic -coverprofile=covprofile
+          sed -i "s/$(pwd|sed 's/\//\\\//g')/./g" covprofile # convert absolute path to relative path 
         # working-directory: src/github.com/boseca/raweml # add this !!!!!!!!!!!!
 
       - name: Install goveralls
@@ -38,6 +40,8 @@ jobs:
           echo "PWD"
           pwd
           GO111MODULE=on go get github.com/mattn/goveralls@latest
+          GO111MODULE=on go get github.com/jandelgado/gcov2lcov@latest
+
 
       # add this step for go 1.10 !!!!!!!!!!!!
       - name: Set up GOPATH
@@ -76,30 +80,31 @@ jobs:
         run: |
           echo "PWD"
           pwd
-          mkdir coverage
+          mkdir -p coverage
           goveralls -coverprofile=covprofile -service=github
-          goveralls -coverprofile=./coverage/lcov.info -service=github
+        # working-directory: src/github.com/boseca/raweml # add this !!!!!!!!!!!
+
+      - name: Push test coverage 1 - prep
+        if: success()
+        continue-on-error: true
+        run: |
+          echo "PWD"
+          pwd
+          mkdir -p coverage
+          gcov2lcov -infile=covprofile -outfile=./coverage/lcov.info
         # working-directory: src/github.com/boseca/raweml # add this !!!!!!!!!!!
 
       - name: Push test coverage 1
         if: success()
         continue-on-error: true
+        # env:
+        #   COVERALLS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # NOTE:  Default: "./coverage/lcov.info". Local path to the lcov output file produced by your test suite. An error will be thrown if the file can't be found. This is the file that will be sent to the Coveralls API.
         uses: coverallsapp/github-action@master
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push test coverage 2
-        if: success()
-        continue-on-error: true
-        env:
-          COVERALLS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "PWD"
-          pwd
-          # cd $GOPATH/src/github.com/boseca/raweml
-          goveralls -coverprofile=covprofile -service=github
-
-      - name: Push test coverage 3
         if: success()
         continue-on-error: true
         uses: shogo82148/actions-goveralls@v1
