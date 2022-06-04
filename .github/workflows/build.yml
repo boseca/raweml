@@ -19,17 +19,6 @@ jobs:
         with:
           go-version: 1.15
 
-      # add this step for go 1.10 !!!!!!!!!!!!
-      - name: Set up GOPATH
-        run: |
-          echo "GOPATH=${{ github.workspace }}" 
-          echo "${{ github.workspace }}/bin"
-          echo "PWD"
-          pwd
-          
-          echo "GOPATH=${{ github.workspace }}" >> "$GITHUB_ENV"
-          echo "${{ github.workspace }}/bin" >> "$GITHUB_PATH
-
       - name: Checkout the code
         uses: actions/checkout@v2
         with:
@@ -41,15 +30,42 @@ jobs:
 
       - name: Run Test and get coverage
         run: go test -race -covermode atomic -coverprofile=covprofile
-        working-directory: src/example.com/owner/repo # add this !!!!!!!!!!!!
+        # working-directory: src/github.com/boseca/raweml # add this !!!!!!!!!!!!
 
       - name: Install goveralls
         if: success()
         run: |
           echo "PWD"
           pwd
-          GO111MODULE=on go install github.com/mattn/goveralls@latest
-        # run: GO111MODULE=on go get github.com/mattn/goveralls@latest
+          GO111MODULE=on go get github.com/mattn/goveralls@latest
+
+      # add this step for go 1.10 !!!!!!!!!!!!
+      - name: Set up GOPATH
+        run: |
+          echo "BEFORE -----------------"
+          pwd
+          echo $GOPATH
+          echo $GITHUB_PATH
+          echo $GITHUB_ENV
+          echo "........................"
+          echo "GOPATH=${{ github.workspace }}" 
+          echo "${{ github.workspace }}/bin"
+          echo "AFTER -----------------"
+          pwd
+          echo $GOPATH
+          echo $GITHUB_PATH
+          echo $GITHUB_ENV
+          echo "........................"
+          
+          echo "GOPATH=${{ github.workspace }}" >> "$GITHUB_ENV"
+          echo "${{ github.workspace }}/bin" >> "$GITHUB_PATH"
+          echo "AFTER 2 -----------------"
+          pwd
+          echo $GOPATH
+          echo $GITHUB_PATH
+          echo $GITHUB_ENV
+          echo "........................"
+
 
       - name: Push test coverage 0
         if: success()
@@ -60,7 +76,8 @@ jobs:
           echo "PWD"
           pwd
           goveralls -coverprofile=covprofile -service=github
-        working-directory: src/example.com/owner/repo # add this !!!!!!!!!!!
+          goveralls -coverprofile=./coverage/lcov.info -service=github
+        # working-directory: src/github.com/boseca/raweml # add this !!!!!!!!!!!
 
       - name: Push test coverage 1
         if: success()
@@ -77,7 +94,7 @@ jobs:
         run: |
           echo "PWD"
           pwd
-          cd $GOPATH/src/github.com/yourusername/yourpackage
+          cd $GOPATH/src/github.com/boseca/raweml
           goveralls -coverprofile=covprofile -service=github
 
       - name: Push test coverage 3
