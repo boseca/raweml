@@ -289,7 +289,6 @@ func TestThread(t *testing.T) {
 		if got := ft.UnixNanoseconds(); got/100 != want/100 {
 			t.Errorf("Invalid Filetime conversion!\ngot: %v\nwant: %v", got, want)
 		}
-		t.Logf("DIFF:%v", want/100)
 	})
 	t.Run("Test converting Bytes to Int", func(t *testing.T) {
 		want := int64(123456789)
