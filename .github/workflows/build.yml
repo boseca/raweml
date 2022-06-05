@@ -1,0 +1,42 @@
+# This workflow will run test and upload the coverage when push or pull_request is made on `dev` branch
+name: build
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.15
+
+      - name: Checkout the code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 2
+
+      - name: Get dependencies
+        run: |
+          go get -v -t -d ./...
+
+      - name: Run Test and get coverage
+        run: |
+          go test -race -covermode atomic -coverprofile=covprofile
+          sed -i "s/$(pwd|sed 's/\//\\\//g')/./g" covprofile # convert absolute path to relative path 
+
+      - name: Push test coverage
+        if: success()
+        continue-on-error: true
+        uses: shogo82148/actions-goveralls@v1
+        with:
+          path-to-profile: covprofile
+

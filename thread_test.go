@@ -1,6 +1,7 @@
 package raweml
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
@@ -264,6 +265,43 @@ func TestThread(t *testing.T) {
 			if len(item.Result) > 0 {
 				t.Error(fmt.Sprintf("Match failed '%v'\n: '%v'\n", item.ThreadIndex, item.Result))
 			}
+		}
+	})
+	t.Run("Test New Thread", func(t *testing.T) {
+		thread := NewThread("Hello world")
+		thread.AddChildBlock()
+		want := thread.Bytes()
+		threadParm := NewEmailThreadFromParams(thread.DateUnixNano, thread.GetGUID(), thread.GetTopic(), thread.ChildBlocks)
+		got := threadParm.Bytes()
+		if bytes.Compare(got, want) != 0 {
+			t.Errorf("Invalid Filetime conversion!\ngot: %s\nwant: %s", got, want)
+		}
+		if got := thread.String(); got != thread.Index() {
+			t.Errorf("String does not match the index!\ngot: %s\nwant: %s", got, thread.Index())
+		}
+		if got := thread.Reference(); got != "MbfJRQw5X+qg8GSOJxjM2Q==" {
+			t.Errorf("Invalid reference!\ngot:%s\nwant:%s", got, "MbfJRQw5X+qg8GSOJxjM2Q==")
+		}
+	})
+	t.Run("Test converting Filetime to Unix nano seconds", func(t *testing.T) {
+		want := time.Now().UTC().UnixNano()
+		ft := UnixNanoToFiletime(want)
+		if got := ft.UnixNanoseconds(); got/100 != want/100 {
+			t.Errorf("Invalid Filetime conversion!\ngot: %v\nwant: %v", got, want)
+		}
+	})
+	t.Run("Test converting Bytes to Int", func(t *testing.T) {
+		want := int64(123456789)
+		b := int64ToBytes(want)
+		if got := bytesToInt64(b); got != want {
+			t.Errorf("Invalid bytes conversion!\ngot: %v\nwant: %v", got, want)
+		}
+	})
+	t.Run("Test conversion Hex to Base64", func(t *testing.T) {
+		b := []byte("hello world")
+		want := "aGVsbG8gd29ybGQ="
+		if got := hexToBase64(b); got != want {
+			t.Errorf("Invalid bytes conversion!\ngot: %v\nwant: %v", got, want)
 		}
 	})
 }
