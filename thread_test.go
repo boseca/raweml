@@ -286,9 +286,10 @@ func TestThread(t *testing.T) {
 	t.Run("Test converting Filetime to Unix nano seconds", func(t *testing.T) {
 		want := time.Now().UTC().UnixNano()
 		ft := UnixNanoToFiletime(want)
-		if got := ft.UnixNanoseconds(); got != want {
+		if got := ft.UnixNanoseconds(); got/100 != want/100 {
 			t.Errorf("Invalid Filetime conversion!\ngot: %v\nwant: %v", got, want)
 		}
+		t.Logf("DIFF:%v", want/100)
 	})
 	t.Run("Test converting Bytes to Int", func(t *testing.T) {
 		want := int64(123456789)
