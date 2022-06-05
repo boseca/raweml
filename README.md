@@ -1,9 +1,11 @@
 RawEml
 =========
-This is a wrapper for the AWS SES raw email and allows to set the message priority and the conversation topic to group emails with same topic.
+This package is for a granual control of emails that are sent with AWS SES.  
+It supports setting the email priority, conversation topic for grouping and any other email header tags.
 
 [![Build Status](https://github.com/boseca/raweml/workflows/build/badge.svg)](https://github.com/boseca/raweml/actions?query=workflow%3Abuild)
 [![Coverage Status](https://coveralls.io/repos/github/boseca/raweml/badge.svg?branch=master)](https://coveralls.io/github/boseca/raweml?branch=master)
+[![Go Report Card](https://goreportcard.com/badge/github.com/boseca/raweml)](https://goreportcard.com/report/github.com/boseca/raweml)
 [![Documentation](https://godoc.org/gopkg.in/raweml?status.svg)](https://godoc.org/gopkg.in/raweml)
 
 ## Description
@@ -78,4 +80,14 @@ go test -v ./example
 - Lint
 ```bash
 golint
+```
+
+- Show code coverage
+```bash
+go test -coverprofile=c.out
+sed -i "s/$(pwd|sed 's/\//\\\//g')/./g" c.out   # convert absolute path to relative path 
+go tool cover -html=c.out -o=c.html             # optional
+gcov2lcov -infile=c.out -outfile=c.lcov
+genhtml -q --legend -o coverage_html --title='Raweml' c.lcov
+x-www-browser file:///$(pwd)/coverage_html/index.html
 ```

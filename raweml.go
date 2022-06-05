@@ -11,6 +11,7 @@ import (
 	"net/textproto"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -391,7 +392,9 @@ func addAttachments(w io.Writer, attachments []Attachment, boundary string) erro
 // Header values will be trimmed but otherwise left alone.
 // Headers with multiple values are not supported and will return an error.
 func writeHeader(w io.Writer, header *textproto.MIMEHeader) error {
-	for k, vs := range *header {
+	// for k, vs := range *header {
+	for _, k := range sortedHeaders(header) {
+		vs := header.Values(k)
 		_, err := fmt.Fprintf(w, "%s: ", k)
 		if err != nil {
 			return err
@@ -466,6 +469,15 @@ func (priority EmailPriority) ToNumber() string {
 // String converts email priority to string
 func (priority EmailPriority) String() string {
 	return string(priority)
+}
+
+func sortedHeaders(header *textproto.MIMEHeader) (keys []string) {
+	// type MIMEHeader map[string][]string
+	for k := range *header {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // func win32TimeFromTar(key string, hdrs map[string]string, unixTime time.Time) Filetime {

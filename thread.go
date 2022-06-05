@@ -373,11 +373,6 @@ func unixToTimeStamp64(unixNanosecond int64) int64 {
 	return unixNanosecond/100 + 116444736000000000
 }
 
-// unixToTimeStamp converts unix time to time stamp uint64
-func unixToTimeStamp(unixNanosecond uint64) uint64 {
-	return unixNanosecond/100 + 116444736000000000
-}
-
 // Helping functions (private)
 
 func int64ToBytes(num int64) []byte {
@@ -385,6 +380,7 @@ func int64ToBytes(num int64) []byte {
 	binary.BigEndian.PutUint64(b, uint64(num))
 	return b
 }
+
 func bytesToInt64(b []byte) int64 {
 	return int64(binary.BigEndian.Uint64(b))
 }
