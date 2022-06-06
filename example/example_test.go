@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -47,8 +48,11 @@ func Example_send() {
 			From:       "NO REPLAY EMAIL ACCOUNT <no-reply@example.com>",
 			Recipients: raweml.NewRecipients("customer@example.com", "", ""),
 			Subject:    "Simple Test",
-			HTMLBody:   "<h1>Amazon SES Test Email (AWS SDK for Go)</h1><p><b>Time: </b>" + time.Now().Format("2006-01-02 15:04:05") + "</p>",
-			AwsRegion:  "us-east-1",
+			HTMLBody: "<h1>Amazon SES Test Email (AWS SDK for Go)</h1><p>" +
+				"<img src='cid:1001' title='mars' />" +
+				"<br/><b>Time: </b>" + time.Now().Format("2006-01-02 15:04:05") + "</p>",
+			Attachments: []raweml.Attachment{{Name: "Mars.png", ContentID: "1001"}}, //, ContentType: "image/png; name=\"Mars.png\""}},
+			AwsRegion:   "us-east-1",
 		})
 
 	// check the response
@@ -76,6 +80,11 @@ func Example_send_advanced() {
 
 	subject := "TEST email =?utf-8?B?5L2g5aW9?= >>" + time.Now().Format("2006-01-02 15:04:05")
 	topic := getEmailTopic(525, "customer_username", getNormilizedSubject(subject, 3))
+	file, err := os.Open("Mars.png")
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
 
 	// build the email
 	email := raweml.Email{
@@ -91,7 +100,7 @@ func Example_send_advanced() {
 			"<br />" +
 			"<p><b>Time: </b>" + time.Now().Format("2006-01-02 15:04:05") + "</p>",
 		CharSet:     "UTF-8",
-		Attachments: []raweml.Attachment{{Name: "Mars.png", ContentID: "1001"}}, //, ContentType: "image/png; name=\"Mars.png\""}},
+		Attachments: []raweml.Attachment{{Name: "Mars.png", ContentID: "1001", Data: file}}, //, ContentType: "image/png; name=\"Mars.png\""}},
 		Headers:     nil,
 		Priority:    raweml.PriorityHigh,
 		Topic:       topic, // when set,  "Thread-Topic", "Thread-Index" and "References" header attributes will be set

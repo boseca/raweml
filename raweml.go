@@ -349,16 +349,19 @@ func _addAttachment(w io.Writer, item Attachment, boundary string) error {
 	if len(contentType) == 0 {
 		contentType = "application/octet-stream"
 	}
-
-	file, err := os.Open(item.Name)
-	if err != nil {
-		return err
-		// alternative: attach blank file
-		// fmt.Fprintf(w, "\n--%s\n", boundary)
-		// fmt.Fprintf(w, "Content-Type: text/plain; charset=utf-8\n")
-		// fmt.Fprintf(w, "could not open file: %v\n", err)
+	fileReader := item.Data
+	if fileReader == nil {
+		file, err := os.Open(item.Name)
+		if err != nil {
+			return err
+			// alternative: attach blank file
+			// fmt.Fprintf(w, "\n--%s\n", boundary)
+			// fmt.Fprintf(w, "Content-Type: text/plain; charset=utf-8\n")
+			// fmt.Fprintf(w, "could not open file: %v\n", err)
+		}
+		fileReader = file
+		defer file.Close()
 	}
-	defer file.Close()
 
 	fmt.Fprintf(w, "\n--%s\n", boundary)
 	fmt.Fprintf(w, "Content-Type: %s\n", contentType)
@@ -369,7 +372,7 @@ func _addAttachment(w io.Writer, item Attachment, boundary string) error {
 
 	b64 := base64.NewEncoder(base64.StdEncoding, w)
 	defer b64.Close()
-	io.Copy(b64, file)
+	io.Copy(b64, fileReader)
 
 	// compress
 	// gzip := gzip.NewWriter(b64)
