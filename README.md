@@ -6,7 +6,7 @@ It supports setting the email priority, conversation topic for grouping and any 
 [![Build Status](https://github.com/boseca/raweml/workflows/build/badge.svg)](https://github.com/boseca/raweml/actions?query=workflow%3Abuild)
 [![Coverage Status](https://coveralls.io/repos/github/boseca/raweml/badge.svg?branch=master)](https://coveralls.io/github/boseca/raweml?branch=master)
 [![Go Report Card](https://goreportcard.com/badge/github.com/boseca/raweml)](https://goreportcard.com/report/github.com/boseca/raweml)
-[![Documentation](https://godoc.org/gopkg.in/raweml?status.svg)](https://godoc.org/gopkg.in/raweml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/boseca/raweml.svg)](https://pkg.go.dev/github.com/boseca/raweml)
 
 ## Description
 
