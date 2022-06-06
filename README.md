@@ -42,7 +42,7 @@ Following fields can be used to build the email struct
 
 ## Download
 
-`go get gopkg.in/raweml`
+`go get github.com/boseca/raweml`
 
 ## Usage
 
