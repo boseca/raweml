@@ -48,10 +48,11 @@ type Recipients struct {
 
 // Attachment represents an email attachment.
 type Attachment struct {
-	Name        string // Name must be set to a valid fully qulified file name.
-	ContentID   string // Optional. Used for embedding images into the email (e.g. <img src="cid:{{ContentID}}">)
-	ContentType string // Optional. When blank falls back to 'application/octet-stream'.
-	Data        io.Reader
+	Name        string    // Name of the attachment
+	Data        io.Reader // reader for the attachment. WARNING do not set this value to a nil *bytes.Buffer it will not be same as nil io.Reader and it will cause panic.
+	FileName    string    // Name must be set to a valid fully qulified file name. If the FileName is set the Data reader will be ignored.
+	ContentID   string    // Optional. Used for embedding images into the email (e.g. <img src="cid:{{ContentID}}">)
+	ContentType string    // Optional. When blank falls back to 'application/octet-stream'.
 }
 
 // EmailPriority defines the type of priorty for the email
@@ -350,17 +351,22 @@ func _addAttachment(w io.Writer, item Attachment, boundary string) error {
 		contentType = "application/octet-stream"
 	}
 	fileReader := item.Data
-	if fileReader == nil {
-		file, err := os.Open(item.Name)
-		if err != nil {
-			return err
-			// alternative: attach blank file
-			// fmt.Fprintf(w, "\n--%s\n", boundary)
-			// fmt.Fprintf(w, "Content-Type: text/plain; charset=utf-8\n")
-			// fmt.Fprintf(w, "could not open file: %v\n", err)
+
+	if fileReader == nil || fileReader == (*bytes.Buffer)(nil) || fileReader == (*os.File)(nil) {
+		if len(item.FileName) > 0 {
+			file, err := os.Open(item.FileName)
+			if err != nil {
+				return err
+				// alternative: attach blank file
+				// fmt.Fprintf(w, "\n--%s\n", boundary)
+				// fmt.Fprintf(w, "Content-Type: text/plain; charset=utf-8\n")
+				// fmt.Fprintf(w, "could not open file: %v\n", err)
+			}
+			fileReader = file
+			defer file.Close()
+		} else {
+			return errors.New("Attachment Data and FileName are missing. At least one of them is required.")
 		}
-		fileReader = file
-		defer file.Close()
 	}
 
 	fmt.Fprintf(w, "\n--%s\n", boundary)
@@ -372,7 +378,10 @@ func _addAttachment(w io.Writer, item Attachment, boundary string) error {
 
 	b64 := base64.NewEncoder(base64.StdEncoding, w)
 	defer b64.Close()
-	io.Copy(b64, fileReader)
+
+	if _, err := io.Copy(b64, fileReader); err != nil {
+		return err
+	}
 
 	// compress
 	// gzip := gzip.NewWriter(b64)
