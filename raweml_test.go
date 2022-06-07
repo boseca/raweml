@@ -59,7 +59,7 @@ func TestRaweml(t *testing.T) {
 			TextBody:    "Amazon SES Test Email (AWS SDK for Go)",
 			HTMLBody:    "<h1>Amazon SES Test Email (AWS SDK for Go)</h1>",
 			Topic:       "Hello world",
-			Attachments: []Attachment{{Name: "example/Mars.png", ContentID: "1001"}},
+			Attachments: []Attachment{{Name: "Mars.png", FileName: "example/Mars.png", ContentID: "1001"}},
 			AwsRegion:   "us-east-1",
 		}
 		eml.SetHeader("X-something", "test")

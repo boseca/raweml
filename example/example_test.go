@@ -45,13 +45,13 @@ func Example_send() {
 	// send the email
 	err := raweml.Send(
 		raweml.Email{
-			From:       "NO REPLAY EMAIL ACCOUNT <no-reply@example.com>",
-			Recipients: raweml.NewRecipients("customer@example.com", "", ""),
+			From:       "NO REPLAY EMAIL ACCOUNT <no-reply@mrialerts.com>",
+			Recipients: raweml.NewRecipients("bjankulovski@mediaresources.com", "boseca@gmail.com", ""),
 			Subject:    "Simple Test",
 			HTMLBody: "<h1>Amazon SES Test Email (AWS SDK for Go)</h1><p>" +
 				"<img src='cid:1001' title='mars' />" +
 				"<br/><b>Time: </b>" + time.Now().Format("2006-01-02 15:04:05") + "</p>",
-			Attachments: []raweml.Attachment{{Name: "Mars.png", ContentID: "1001"}}, //, ContentType: "image/png; name=\"Mars.png\""}},
+			Attachments: []raweml.Attachment{{Name: "Mars.png", FileName: "Mars.png", ContentID: "1001"}}, //, ContentType: "image/png; name=\"Mars.png\""}},
 			AwsRegion:   "us-east-1",
 		})
 
@@ -88,8 +88,8 @@ func Example_send_advanced() {
 
 	// build the email
 	email := raweml.Email{
-		From:       "NO REPLAY EMAIL ACCOUNT <no-reply@example.com>",
-		Recipients: raweml.NewRecipients("customer@example.com", "", ""),
+		From:       "NO REPLAY EMAIL ACCOUNT <no-reply@mrialerts.com>",
+		Recipients: raweml.NewRecipients("bjankulovski@mediaresources.com", "boseca@gmail.com", ""),
 		Feedback:   "", // "AWS Email Feedback <aws-feedback@example.com>",
 		Subject:    subject,
 		TextBody:   "This email was sent with Amazon SES using the AWS SDK for Go.",
@@ -100,7 +100,7 @@ func Example_send_advanced() {
 			"<br />" +
 			"<p><b>Time: </b>" + time.Now().Format("2006-01-02 15:04:05") + "</p>",
 		CharSet:     "UTF-8",
-		Attachments: []raweml.Attachment{{Name: "Mars.png", ContentID: "1001", Data: file}}, //, ContentType: "image/png; name=\"Mars.png\""}},
+		Attachments: []raweml.Attachment{{Name: "Mars.png", FileName: "Mars.png", ContentID: "1001", Data: file}}, //, ContentType: "image/png; name=\"Mars.png\""}},
 		Headers:     nil,
 		Priority:    raweml.PriorityHigh,
 		Topic:       topic, // when set,  "Thread-Topic", "Thread-Index" and "References" header attributes will be set
